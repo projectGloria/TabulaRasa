@@ -1,0 +1,42 @@
+{
+  "id": "ev_318f5b8e25abf4657fbb8b9b97dc3be68b0a2a2f28d33ce1a088b5b0bdb30df3",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_function_find",
+  "params": {
+    "address": "0x864e70"
+  },
+  "result": {
+    "address": "0x864e70",
+    "function": null,
+    "reason": "not inside any discovered function"
+  },
+  "summary": "0x864e70 isn't inside a known function.",
+  "confidence": "derived",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "not_found",
+      "message": "the address may be in code the engine didn't discover (absence is not proof)"
+    }
+  ],
+  "coverage": {
+    "status": "unknown"
+  },
+  "locations": [
+    {
+      "kind": "address",
+      "value": "0x864e70"
+    }
+  ],
+  "links": []
+}

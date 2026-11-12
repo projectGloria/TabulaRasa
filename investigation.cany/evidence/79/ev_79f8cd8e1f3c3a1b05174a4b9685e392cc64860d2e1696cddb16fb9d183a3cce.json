@@ -1,0 +1,48 @@
+{
+  "id": "ev_79f8cd8e1f3c3a1b05174a4b9685e392cc64860d2e1696cddb16fb9d183a3cce",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_xrefs_list",
+  "params": {
+    "address": "0x864ec8",
+    "limit": 200,
+    "offset": 0
+  },
+  "result": {
+    "address": "0x864ec8",
+    "name": null,
+    "references_from": [],
+    "references_to": [],
+    "total_to": 0
+  },
+  "summary": "0x864ec8 is referenced from 0 places and refers to 0.",
+  "confidence": "derived",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "static_references",
+      "message": "references made through computed pointers at run time are not seen"
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 0,
+    "total": 0
+  },
+  "locations": [
+    {
+      "kind": "address",
+      "value": "0x864ec8"
+    }
+  ],
+  "links": []
+}

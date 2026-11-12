@@ -1,0 +1,15 @@
+{
+  "id": "unk_3732688f6e5db0d3",
+  "revision": 2,
+  "question": "Exact main-window layout and column order of the original (no screenshot of the main window, only the Tools menu).",
+  "severity": "medium",
+  "domain": "ui",
+  "status": "blocked",
+  "probes": [
+    "Screenshot of the original main window from the person",
+    "native_window_capture of the original"
+  ],
+  "evidence_for": [],
+  "evidence_against": [],
+  "resolution": "Not settled: the only picture is the Tools menu (which the person wants removed). Built a dark list matching that menu's look, with columns Name, Publisher, Size, Install Date, Version (version added; others follow the fields the scan routine 0x850e4c reads). A screenshot of the original's main window would settle it."
+}

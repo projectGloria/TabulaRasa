@@ -1,0 +1,85 @@
+{
+  "id": "ev_1c4a98594405c6e14507638a4410199d30bb38ad2a025f5cf769920c75a9588b",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_strings_find",
+  "params": {
+    "case_sensitive": false,
+    "limit": 60,
+    "mode": "regex",
+    "offset": 0,
+    "pattern": "^(DisplayName|DisplayVersion|Publisher|InstallDate|EstimatedSize|UninstallString|QuietUninstallString|InstallLocation|DisplayIcon|SystemComponent|ParentKeyName|ReleaseType|WindowsInstaller|URLInfoAbout|HelpLink|Comments|ModifyPath|NoRemove)$"
+  },
+  "result": {
+    "matches": [
+      {
+        "address": "0x1008b6d",
+        "references": [],
+        "section": ".rsrc",
+        "text": "SystemComponent"
+      },
+      {
+        "address": "0x11b4574",
+        "references": [],
+        "section": ".rsrc",
+        "text": "Comments"
+      },
+      {
+        "address": "0x120149e",
+        "references": [],
+        "section": ".rsrc",
+        "text": "Comments"
+      },
+      {
+        "address": "0x125546d",
+        "references": [],
+        "section": ".rsrc",
+        "text": "Comments"
+      },
+      {
+        "address": "0x125cd2f",
+        "references": [],
+        "section": ".rsrc",
+        "text": "Comments"
+      },
+      {
+        "address": "0x12a66e1",
+        "references": [],
+        "section": ".rsrc",
+        "text": "Comments"
+      },
+      {
+        "address": "0x12da212",
+        "references": [],
+        "section": ".rsrc",
+        "text": "Comments"
+      }
+    ],
+    "total": 7
+  },
+  "summary": "7 strings match \"^(DisplayName|DisplayVersion|Publisher|InstallDate|EstimatedSize|UninstallString|QuietUninstallString|InstallLocation|DisplayIcon|SystemComponent|ParentKeyName|ReleaseType|WindowsInstaller|URLInfoAbout|HelpLink|Comments|ModifyPath|NoRemove)$\".",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "data_sections_only",
+      "message": "only strings stored in the file are searched (absence is not proof)"
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 7,
+    "total": 7
+  },
+  "locations": [],
+  "links": []
+}

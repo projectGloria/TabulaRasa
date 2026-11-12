@@ -1,0 +1,42 @@
+{
+  "id": "ev_de7ed06ec15f2ba1c6898a6d24e5818ef2151e9ebcf64f976d267591c4300822",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_strings_find",
+  "params": {
+    "case_sensitive": false,
+    "limit": 40,
+    "mode": "literal",
+    "offset": 0,
+    "pattern": "CurrentVersion\\Uninstall"
+  },
+  "result": {
+    "matches": [],
+    "total": 0
+  },
+  "summary": "0 strings match \"CurrentVersion\\Uninstall\".",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "data_sections_only",
+      "message": "only strings stored in the file are searched (absence is not proof)"
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 0,
+    "total": 0
+  },
+  "locations": [],
+  "links": []
+}

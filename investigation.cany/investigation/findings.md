@@ -1,0 +1,4 @@
+# Findings
+
+- **fnd_1** Program list scanner (0x850e4c) reads HKLM 64-bit Uninstall, HKLM WOW6432Node Uninstall, then HKCU Uninstall (KEY_READ|WOW64_64KEY 0x20119). Entries need UninstallString; SystemComponent=1 or no DisplayName go to a separate hidden group. Size = EstimatedSize*1024, else InstallLocation folder size, else Unknown. WindowsInstaller=1 with {GUID} key → 'MsiExec.exe /X{GUID}'. Status bar shows item count and total size. (Worked it out; evidence: ev_513448cbab39e741aaebbc296d65cdb2d512216c1b6809dca3444a5f354c2bf7, ev_2a528cd203a51310055604ea3e32185b91254b8544073c7e82c413c1a8d259be)
+- **fnd_2** Before uninstalling (0x864758) the original checks whether another installed program shares the same install location and asks 'leftovers will... are you sure you want to continue' (Yes=6 proceeds). (Best guess; evidence: ev_396ecea9ae34e461be842ba0e0b271a9ca89dd7ab98980913421cfdd38215470, ev_75768b0b7b3cb89f8daa4ea3922169a1c08531b8268942e9c59cae940e45b5c3)

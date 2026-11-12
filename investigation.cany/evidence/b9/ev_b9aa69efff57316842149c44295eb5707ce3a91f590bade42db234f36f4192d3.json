@@ -1,0 +1,154 @@
+{
+  "id": "ev_b9aa69efff57316842149c44295eb5707ce3a91f590bade42db234f36f4192d3",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_xrefs_list",
+  "params": {
+    "address": "0x854ab8",
+    "limit": 200,
+    "offset": 0
+  },
+  "result": {
+    "address": "0x854ab8",
+    "name": "sub_854ab8",
+    "references_from": [],
+    "references_to": [
+      {
+        "from": "0x851219",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x851457",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x85167b",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x851692",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x851ba2",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x851f7c",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x851fa1",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x8523d4",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x852612",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x852836",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x85284d",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x852d5d",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x853137",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x85315c",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x85358f",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x8537cd",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x8539f1",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x853a08",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x853f18",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x8542f2",
+        "function": "sub_850e4c",
+        "kind": "data"
+      },
+      {
+        "from": "0x854317",
+        "function": "sub_850e4c",
+        "kind": "data"
+      }
+    ],
+    "total_to": 21
+  },
+  "summary": "0x854ab8 is referenced from 21 places and refers to 0.",
+  "confidence": "derived",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "static_references",
+      "message": "references made through computed pointers at run time are not seen"
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 21,
+    "total": 21
+  },
+  "locations": [
+    {
+      "kind": "address",
+      "value": "0x854ab8"
+    }
+  ],
+  "links": []
+}

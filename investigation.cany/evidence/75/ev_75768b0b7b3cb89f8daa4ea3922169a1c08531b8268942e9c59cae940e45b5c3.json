@@ -1,0 +1,42 @@
+{
+  "id": "ev_75768b0b7b3cb89f8daa4ea3922169a1c08531b8268942e9c59cae940e45b5c3",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_bytes_show",
+  "params": {
+    "address": "0x864e80",
+    "length": 512
+  },
+  "result": {
+    "address": "0x864e80",
+    "ascii": "............I.s.S.a.m.e.L.o.c............... .\".................\".,. ...............L.e.f.t.o.v.e.r.s.W.i.l.l...................................A.r.e.Y.o.u.C.o.n.t.i.n.u.e.....U.....SVW3..U..U..E.3.Uh.P..d.0d. ....MI.......E.....MI........(......MI........(....'....t..@...O..|oG.E......E..U...........'.......s...E...........f~...E..U...m....F.]...t..[..E.P.....E.......U...(.....Q<.E.Ou...P........E........t(..Q........E........t...P........E........(....P....(....P...E...O..3.ZYYd..h.P...E...n...E...n..X...",
+    "file_offset": 4604544,
+    "hex": "b0040200ffffffff0900000049007300530061006d0065004c006f0063000000b0040200ffffffff020000002000220000000000b0040200ffffffff0300000022002c0020000000b0040200ffffffff0d0000004c006500660074006f007600650072007300570069006c006c000000b0040200ffffffff020000000d000a0000000000b0040200ffffffff0e00000041007200650059006f00750043006f006e00740069006e007500650000000000558bec83c4ec53565733d28955ec8955fc8945f833c055687f50860064ff30648920b201a1a04d4900e816e4c5ff8945f0b201a1a04d4900e807e4c5ffa3d428b600b201a1a04d4900e8f6e3c5ffa3d828b600a1f827b60085c074038b40fc8bf84f85ff7c6f47c745f4000000008d45fc8b55f48bcac1e20503d18b0df827b6008b1491e8b373baff8d45ec8b15d09fb5000fb712e8667ebaff8b45ec8b55fce8d76dbcff8bf0468b5dfc85db74038b5bfc8d45fc508bcb8bd68b45fce8f681baff8b55fca1d828b6008b08ff513cff45f44f7599b99c508600ba020000808b45f8e8c5f7ffff84c07428b914518600ba020000808b45f8e8aff7ffff84c07412b99c508600ba010000808b45f8e899f7ffffa1d428b600e80f50baffa1d828b600e80550baff8b45f0e8fd4fbaff33c05a595964891068865086008d45ece8c06ebaff8d45fce8b86ebaff58ffe0e9",
+    "length": 512
+  },
+  "summary": "512 bytes at 0x864e80.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 512,
+    "total": 512
+  },
+  "locations": [
+    {
+      "kind": "address",
+      "value": "0x864e80"
+    }
+  ],
+  "links": []
+}

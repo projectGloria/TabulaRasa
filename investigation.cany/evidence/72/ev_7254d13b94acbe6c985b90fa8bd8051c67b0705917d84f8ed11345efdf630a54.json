@@ -1,0 +1,38 @@
+{
+  "id": "ev_7254d13b94acbe6c985b90fa8bd8051c67b0705917d84f8ed11345efdf630a54",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_function_find",
+  "params": {
+    "address": "0x8549f0"
+  },
+  "result": {
+    "address": "0x8549f0",
+    "entry": "0x8549cc",
+    "function": "sub_8549cc",
+    "offset": 36
+  },
+  "summary": "0x8549f0 is inside sub_8549cc (+0x24).",
+  "confidence": "derived",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "unknown"
+  },
+  "locations": [
+    {
+      "kind": "address",
+      "value": "0x8549f0"
+    }
+  ],
+  "links": []
+}

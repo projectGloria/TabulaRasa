@@ -1,0 +1,11 @@
+/target
+/shots
+*.log
+agent-session.jsonl
+craft.json
+feed.json
+usage.json
+inbox/
+pinned/
+checks/
+

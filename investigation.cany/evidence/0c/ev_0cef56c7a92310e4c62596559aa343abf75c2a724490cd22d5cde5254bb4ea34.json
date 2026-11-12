@@ -1,0 +1,229 @@
+{
+  "id": "ev_0cef56c7a92310e4c62596559aa343abf75c2a724490cd22d5cde5254bb4ea34",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_bytes_find",
+  "params": {
+    "encoding": "utf16le",
+    "limit": 15,
+    "offset": 0,
+    "path": null,
+    "pattern": null,
+    "text": "eftover"
+  },
+  "result": {
+    "file_size": 15410176,
+    "limit": 15,
+    "match_cap_reached": false,
+    "matches": [
+      {
+        "address": "0x864ed6",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 4604630,
+        "file_offset_hex": "0x4642d6",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x86a0ba",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 4625594,
+        "file_offset_hex": "0x4694ba",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x8bf94c",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 4975948,
+        "file_offset_hex": "0x4bed4c",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x8bf96e",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 4975982,
+        "file_offset_hex": "0x4bed6e",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0xd034a2",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9285282,
+        "file_offset_hex": "0x8daea2",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd034d4",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9285332,
+        "file_offset_hex": "0x8daed4",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd08676",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9306230,
+        "file_offset_hex": "0x8e0076",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd2d69e",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9457822,
+        "file_offset_hex": "0x90509e",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd2d6ca",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9457866,
+        "file_offset_hex": "0x9050ca",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd30ca2",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9471650,
+        "file_offset_hex": "0x9086a2",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd43a4a",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9548874,
+        "file_offset_hex": "0x91b44a",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd43a78",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9548920,
+        "file_offset_hex": "0x91b478",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd47114",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9562900,
+        "file_offset_hex": "0x91eb14",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd5ebc0",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9659840,
+        "file_offset_hex": "0x9365c0",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      },
+      {
+        "address": "0xd5ebfc",
+        "bytes": "6500660074006f00760065007200",
+        "file_offset": 9659900,
+        "file_offset_hex": "0x9365fc",
+        "length": 14,
+        "matched": "utf16le",
+        "section": ".rsrc"
+      }
+    ],
+    "native_container": "pe",
+    "offset": 0,
+    "path": "C:\\Program Files (x86)\\HiBit Uninstaller\\HiBitUninstaller.exe",
+    "searched_for": [
+      {
+        "kind": "utf16le",
+        "length": 14
+      }
+    ],
+    "total_matches": 74
+  },
+  "summary": "74 match(es) for utf16le in HiBitUninstaller.exe; showing 15 from #0.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "file_bytes_only",
+      "message": "The file's bytes are searched as stored: compressed, encrypted or packed regions and data built at run time are not seen, so no match is not proof of absence."
+    },
+    {
+      "code": "unmapped_regions",
+      "message": "Matches in headers, overlays or debug data that are not loaded into memory have no virtual address."
+    }
+  ],
+  "coverage": {
+    "status": "partial",
+    "examined": 15,
+    "total": 74,
+    "next_offset": 15
+  },
+  "locations": [
+    {
+      "kind": "file_offset",
+      "value": "0x4642d6"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x4694ba"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x4bed4c"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x4bed6e"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x8daea2"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x8daed4"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x8e0076"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x90509e"
+    }
+  ],
+  "links": []
+}

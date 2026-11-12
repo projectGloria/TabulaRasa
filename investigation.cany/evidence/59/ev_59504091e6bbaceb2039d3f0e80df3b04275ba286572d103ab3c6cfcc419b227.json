@@ -1,0 +1,174 @@
+{
+  "id": "ev_59504091e6bbaceb2039d3f0e80df3b04275ba286572d103ab3c6cfcc419b227",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_bytes_find",
+  "params": {
+    "encoding": "utf16le",
+    "limit": 10,
+    "offset": 0,
+    "path": null,
+    "pattern": null,
+    "text": "%LOCALAPPDATA%"
+  },
+  "result": {
+    "file_size": 15410176,
+    "limit": 10,
+    "match_cap_reached": false,
+    "matches": [
+      {
+        "address": "0x9934a4",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 5843108,
+        "file_offset_hex": "0x5928a4",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9b4fa8",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 5981096,
+        "file_offset_hex": "0x5b43a8",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9cc940",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6077760,
+        "file_offset_hex": "0x5cbd40",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9ccb98",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6078360,
+        "file_offset_hex": "0x5cbf98",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9ccbf4",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6078452,
+        "file_offset_hex": "0x5cbff4",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9ccc5c",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6078556,
+        "file_offset_hex": "0x5cc05c",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9cccac",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6078636,
+        "file_offset_hex": "0x5cc0ac",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9ccd24",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6078756,
+        "file_offset_hex": "0x5cc124",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      },
+      {
+        "address": "0x9ccd80",
+        "bytes": "25004c004f00430041004c0041005000500044004100540041002500",
+        "file_offset": 6078848,
+        "file_offset_hex": "0x5cc180",
+        "length": 28,
+        "matched": "utf16le",
+        "section": ".text"
+      }
+    ],
+    "native_container": "pe",
+    "offset": 0,
+    "path": "C:\\Program Files (x86)\\HiBit Uninstaller\\HiBitUninstaller.exe",
+    "searched_for": [
+      {
+        "kind": "utf16le",
+        "length": 28
+      }
+    ],
+    "total_matches": 9
+  },
+  "summary": "9 match(es) for utf16le in HiBitUninstaller.exe; showing 9 from #0.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "file_bytes_only",
+      "message": "The file's bytes are searched as stored: compressed, encrypted or packed regions and data built at run time are not seen, so no match is not proof of absence."
+    },
+    {
+      "code": "unmapped_regions",
+      "message": "Matches in headers, overlays or debug data that are not loaded into memory have no virtual address."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 9,
+    "total": 9
+  },
+  "locations": [
+    {
+      "kind": "file_offset",
+      "value": "0x5928a4"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5b43a8"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5cbd40"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5cbf98"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5cbff4"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5cc05c"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5cc0ac"
+    },
+    {
+      "kind": "file_offset",
+      "value": "0x5cc124"
+    }
+  ],
+  "links": []
+}

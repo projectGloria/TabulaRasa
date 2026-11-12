@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "values": [
+    {"name": "registry places read", "group": "program list", "value": "HKLM 64-bit, HKLM WOW6432Node, HKCU", "source": "function 0x850e4c"},
+    {"name": "registry access mask", "group": "program list", "value": 131353, "source": "function 0x850e4c (0x20119 at 0x85112a)"},
+    {"name": "requires UninstallString", "group": "program list", "value": true, "source": "function 0x850e4c (0x851229)"},
+    {"name": "SystemComponent value that hides", "group": "program list", "value": 1, "source": "function 0x850e4c (0x851279)"},
+    {"name": "EstimatedSize multiplier", "group": "sizes", "value": 1024, "unit": "bytes per KB", "source": "function 0x850e4c (0x8517c7)"},
+    {"name": "size fallback", "group": "sizes", "value": "install folder size, else Unknown", "source": "function 0x850e4c (0x85188a)"},
+    {"name": "MSI uninstall command", "group": "uninstall", "value": "MsiExec.exe /X{GUID}", "source": "function 0x850e4c (0x85177d)"},
+    {"name": "warn when install folder is shared", "group": "uninstall", "value": true, "source": "function 0x864758"},
+    {"name": "install date fallback", "group": "program list", "value": "registry key last-write date", "estimated": true},
+    {"name": "leftover matching", "group": "leftovers", "value": "exact folder and key names only", "estimated": true},
+    {"name": "file removal", "group": "leftovers", "value": "Recycle Bin", "estimated": true},
+    {"name": "registry backup before delete", "group": "leftovers", "value": true, "estimated": true}
+  ]
+}

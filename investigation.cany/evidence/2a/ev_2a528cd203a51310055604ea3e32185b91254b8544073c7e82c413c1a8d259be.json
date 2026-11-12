@@ -1,0 +1,42 @@
+{
+  "id": "ev_2a528cd203a51310055604ea3e32185b91254b8544073c7e82c413c1a8d259be",
+  "subject": {
+    "kind": "pe",
+    "sha256": "89092212bd920b84d235a5d4ea89ccaa7f64ec32fcaf769f1e9cdb8070c3dcea",
+    "name": "HiBitUninstaller.exe"
+  },
+  "operation": "native_bytes_show",
+  "params": {
+    "address": "0x851279",
+    "length": 40
+  },
+  "result": {
+    "address": "0x851279",
+    "ascii": "Hu.....3...u...K........................",
+    "file_offset": 4523641,
+    "hex": "487504b301eb0233db84db7518ba104b85008b8514ffffffe81a89cdff84c00f85ee0f00008b8518",
+    "length": 40
+  },
+  "summary": "40 bytes at 0x851279.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "windows-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 40,
+    "total": 40
+  },
+  "locations": [
+    {
+      "kind": "address",
+      "value": "0x851279"
+    }
+  ],
+  "links": []
+}

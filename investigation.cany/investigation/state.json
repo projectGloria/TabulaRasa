@@ -1,0 +1,36 @@
+{
+  "revision": 4,
+  "brief": {
+    "question": "How does HiBit Uninstaller's core uninstaller work (program list, columns, uninstall, leftover scan) so Tabula Rasa can rebuild only that part?",
+    "purpose": "Rebuild an uninstaller-only app named Tabula Rasa (Rust/egui)",
+    "targets": [
+      "C:\\Program Files (x86)\\HiBit Uninstaller\\HiBitUninstaller.exe"
+    ],
+    "constraints": [],
+    "done_when": "Registry sources, columns, uninstall flow and leftover scan rules are known with addresses."
+  },
+  "plan": [],
+  "hypotheses": [],
+  "findings": [
+    {
+      "id": "fnd_1",
+      "statement": "Program list scanner (0x850e4c) reads HKLM 64-bit Uninstall, HKLM WOW6432Node Uninstall, then HKCU Uninstall (KEY_READ|WOW64_64KEY 0x20119). Entries need UninstallString; SystemComponent=1 or no DisplayName go to a separate hidden group. Size = EstimatedSize*1024, else InstallLocation folder size, else Unknown. WindowsInstaller=1 with {GUID} key → 'MsiExec.exe /X{GUID}'. Status bar shows item count and total size.",
+      "evidence_ids": [
+        "ev_513448cbab39e741aaebbc296d65cdb2d512216c1b6809dca3444a5f354c2bf7",
+        "ev_2a528cd203a51310055604ea3e32185b91254b8544073c7e82c413c1a8d259be"
+      ],
+      "confidence": "derived"
+    },
+    {
+      "id": "fnd_2",
+      "statement": "Before uninstalling (0x864758) the original checks whether another installed program shares the same install location and asks 'leftovers will... are you sure you want to continue' (Yes=6 proceeds).",
+      "evidence_ids": [
+        "ev_396ecea9ae34e461be842ba0e0b271a9ca89dd7ab98980913421cfdd38215470",
+        "ev_75768b0b7b3cb89f8daa4ea3922169a1c08531b8268942e9c59cae940e45b5c3"
+      ],
+      "confidence": "inferred"
+    }
+  ],
+  "handoff": "Tabula Rasa (Rust/egui, workspace root) builds and passes checks. Program list rules from 0x850e4c, shared-folder warning from 0x864758 in MECHANICS.md/mechanics.json. Leftover scan is exact-name only, Recycle Bin + .reg backups. Open: original main window layout (no screenshot). Next ideas: export list, batch uninstall, quiet uninstall option.",
+  "updated": "2026-11-12T04:59:30Z"
+}
