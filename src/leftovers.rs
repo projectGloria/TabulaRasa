@@ -4,6 +4,7 @@
 //! .reg backup before they are deleted.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use winreg::RegKey;
 use winreg::enums::*;
 
@@ -66,9 +67,9 @@ fn is_generic(name: &str) -> bool {
 /// "7-Zip 23.01 (x64)" -> "7-Zip"; "Mozilla Firefox (x64 en-US)" -> "Mozilla Firefox"
 pub fn name_stem(name: &str) -> String {
     let mut s = name.to_string();
-    while let (Some(a), Some(b)) = (s.find('('), s.rfind(')')) {
-        if a < b {
-            s.replace_range(a..=b, " ");
+    while let Some(a) = s.find('(') {
+        if let Some(rel_b) = s[a..].find(')') {
+            s.replace_range(a..=a + rel_b, " ");
         } else {
             break;
         }
@@ -114,13 +115,49 @@ fn env_path(var: &str) -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from).filter(|p| p.is_dir())
 }
 
-fn same_path(a: &Path, b: &Path) -> bool {
-    a.to_string_lossy().trim_end_matches('\\').eq_ignore_ascii_case(b.to_string_lossy().trim_end_matches('\\'))
+fn strip_verbatim(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
 }
 
-/// Folders that must never be removed, whatever a registry entry says.
-fn protected_folders() -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = [
+pub fn same_path(a: &Path, b: &Path) -> bool {
+    let a_s = strip_verbatim(a);
+    let b_s = strip_verbatim(b);
+    a_s.trim_end_matches('\\').eq_ignore_ascii_case(b_s.trim_end_matches('\\'))
+}
+
+pub fn path_starts_with_ci(path: &Path, base: &Path) -> bool {
+    let p_s = strip_verbatim(path);
+    let b_s = strip_verbatim(base);
+    if b_s.is_empty() {
+        return false;
+    }
+    let p_norm = Path::new(&p_s);
+    let b_norm = Path::new(&b_s);
+    let mut p_it = p_norm.components();
+    for b_comp in b_norm.components() {
+        let Some(p_comp) = p_it.next() else {
+            return false;
+        };
+        if !p_comp
+            .as_os_str()
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&b_comp.as_os_str().to_string_lossy())
+        {
+            return false;
+        }
+    }
+    true
+}
+
+struct ProtectedCache {
+    exact: Vec<PathBuf>,
+    sys_roots: Vec<PathBuf>,
+    users_dir: Option<PathBuf>,
+}
+
+static PROTECTED: LazyLock<ProtectedCache> = LazyLock::new(|| {
+    let mut exact: Vec<PathBuf> = [
         "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData", "APPDATA", "LOCALAPPDATA",
         "USERPROFILE", "PUBLIC", "SystemRoot", "windir", "SystemDrive", "CommonProgramFiles",
         "CommonProgramFiles(x86)", "TEMP",
@@ -129,29 +166,40 @@ fn protected_folders() -> Vec<PathBuf> {
     .filter_map(|v| std::env::var_os(v).map(PathBuf::from))
     .collect();
     if let Some(l) = env_path("LOCALAPPDATA") {
-        v.push(l.join("Programs"));
-        v.push(l.join("Temp"));
+        exact.push(l.join("Programs"));
+        exact.push(l.join("Temp"));
     }
     if let Some(a) = env_path("APPDATA") {
-        v.push(a.join(r"Microsoft\Windows\Start Menu\Programs"));
+        exact.push(a.join(r"Microsoft\Windows\Start Menu\Programs"));
     }
     if let Some(p) = env_path("ProgramData") {
-        v.push(p.join(r"Microsoft\Windows\Start Menu\Programs"));
+        exact.push(p.join(r"Microsoft\Windows\Start Menu\Programs"));
     }
+    let mut users_dir = None;
     if let Some(u) = env_path("USERPROFILE") {
         if let Some(parent) = u.parent() {
-            v.push(parent.to_path_buf());
+            let parent_buf = parent.to_path_buf();
+            exact.push(parent_buf.clone());
+            users_dir = Some(parent_buf);
         }
     }
     if let Some(sd) = std::env::var_os("SystemDrive") {
         let sd_str = sd.to_string_lossy();
         let drive = PathBuf::from(format!("{}:\\", sd_str.trim_end_matches([':', '\\'])));
         for sys_dir in ["Recovery", "System Volume Information", "Boot", "PerfLogs", "$Recycle.Bin", "Config.Msi"] {
-            v.push(drive.join(sys_dir));
+            exact.push(drive.join(sys_dir));
         }
     }
-    v
-}
+    let sys_roots = ["SystemRoot", "windir"]
+        .iter()
+        .filter_map(|v| env_path(v))
+        .collect();
+    ProtectedCache {
+        exact,
+        sys_roots,
+        users_dir,
+    }
+});
 
 pub fn is_safe_folder(path: &Path) -> bool {
     if !path.is_absolute() {
@@ -166,24 +214,29 @@ pub fn is_safe_folder(path: &Path) -> bool {
         return false;
     }
 
-    let protected = protected_folders();
-    if protected.iter().any(|p| same_path(p, path)) {
-        return false;
-    }
-
-    for var in ["SystemRoot", "windir"] {
-        if let Some(sys_root) = env_path(var) {
-            if path.starts_with(&sys_root) {
-                return false;
-            }
+    if let Some(first_normal) = path.components().find_map(|c| match c {
+        std::path::Component::Normal(s) => Some(s.to_string_lossy()),
+        _ => None,
+    }) {
+        if first_normal.eq_ignore_ascii_case("$Recycle.Bin")
+            || first_normal.eq_ignore_ascii_case("System Volume Information")
+        {
+            return false;
         }
     }
 
-    if let Some(u) = env_path("USERPROFILE") {
-        if let Some(users_dir) = u.parent() {
-            if path.parent().is_some_and(|p| same_path(p, users_dir)) {
-                return false;
-            }
+    let cache = &*PROTECTED;
+    if cache.exact.iter().any(|p| same_path(p, path)) {
+        return false;
+    }
+
+    if cache.sys_roots.iter().any(|sys_root| path_starts_with_ci(path, sys_root)) {
+        return false;
+    }
+
+    if let Some(users_dir) = &cache.users_dir {
+        if path.parent().is_some_and(|p| same_path(p, users_dir)) {
+            return false;
         }
     }
 
@@ -200,17 +253,22 @@ pub fn scan(program: &Program, others: &[Program]) -> Vec<Leftover> {
         .map(|o| PathBuf::from(&o.install_location))
         .collect();
     let used_by_other = |p: &Path| {
-        other_locations.iter().any(|o| same_path(o, p) || o.starts_with(p))
+        other_locations
+            .iter()
+            .any(|o| same_path(o, p) || path_starts_with_ci(o, p) || path_starts_with_ci(p, o))
     };
 
     let add_folder = |found: &mut Vec<Leftover>, p: PathBuf, reason: &'static str| {
         if !p.is_dir() || !is_safe_folder(&p) || used_by_other(&p) {
             return;
         }
-        if found.iter().any(|f| f.kind == Kind::Folder && (same_path(Path::new(&f.path), &p) || p.starts_with(&f.path))) {
+        if found
+            .iter()
+            .any(|f| f.kind == Kind::Folder && (same_path(Path::new(&f.path), &p) || path_starts_with_ci(&p, Path::new(&f.path))))
+        {
             return;
         }
-        found.retain(|f| !(f.kind != Kind::RegistryKey && Path::new(&f.path).starts_with(&p)));
+        found.retain(|f| !(f.kind != Kind::RegistryKey && path_starts_with_ci(Path::new(&f.path), &p)));
         found.push(Leftover {
             kind: Kind::Folder,
             size: folder_size(&p, 200_000),
@@ -284,7 +342,7 @@ pub fn scan(program: &Program, others: &[Program]) -> Vec<Leftover> {
     for dir in menus.iter().chain(desktops.iter()) {
         for n in &names {
             let lnk = dir.join(format!("{n}.lnk"));
-            if lnk.is_file() && !found.iter().any(|f| lnk.starts_with(&f.path)) {
+            if lnk.is_file() && !found.iter().any(|f| f.kind != Kind::RegistryKey && path_starts_with_ci(&lnk, Path::new(&f.path))) {
                 found.push(Leftover {
                     kind: Kind::File,
                     size: std::fs::metadata(&lnk).ok().map(|m| m.len()),
@@ -368,13 +426,28 @@ pub fn remove(items: &[Leftover], program_name: &str) -> Vec<(String, Option<Str
                 }
             }
             Kind::RegistryKey => {
-                let file = backup_dir.join(format!("{} {} {}.reg", safe_name.trim(), timestamp(), i));
-                let _ = std::process::Command::new("reg")
-                    .args(["export", &shown, &file.to_string_lossy(), "/y"])
+                let prefix = if safe_name.trim().is_empty() { "program" } else { safe_name.trim() };
+                let file = backup_dir.join(format!("{prefix} {} {i}.reg", timestamp()));
+                let status = std::process::Command::new("reg")
+                    .args(["export", &shown, &file.to_string_lossy(), "/y", "/reg:64"])
                     .creation_flags_hidden()
                     .status();
-                let root = RegKey::predef(if item.machine { HKEY_LOCAL_MACHINE } else { HKEY_CURRENT_USER });
-                root.delete_subkey_all(&item.path).map_err(|e| e.to_string())
+                if !status.is_ok_and(|s| s.success()) || !file.is_file() {
+                    Err("Failed to create registry backup (.reg); skipped deletion".to_string())
+                } else {
+                    let root = RegKey::predef(if item.machine { HKEY_LOCAL_MACHINE } else { HKEY_CURRENT_USER });
+                    match root.open_subkey_with_flags(&item.path, KEY_READ | KEY_WRITE | KEY_WOW64_64KEY) {
+                        Ok(key) => {
+                            let res = key.delete_subkey_all("").map_err(|e| e.to_string());
+                            drop(key);
+                            res.and_then(|_| {
+                                root.delete_subkey_with_flags(&item.path, KEY_WOW64_64KEY)
+                                    .map_err(|e| e.to_string())
+                            })
+                        }
+                        Err(e) => Err(e.to_string()),
+                    }
+                }
             }
         };
         results.push((shown, res.err()));
@@ -406,6 +479,8 @@ mod tests {
         assert_eq!(name_stem("7-Zip 26.04 (x64 edition)"), "7-Zip");
         assert_eq!(name_stem("Ada version 1.1.8"), "Ada");
         assert_eq!(name_stem("Antigravity 2.31.0"), "Antigravity");
+        assert_eq!(name_stem("Foo (Bar) Studio (x64)"), "Foo Studio");
+        assert_eq!(name_stem("(Preview) App Name (64-bit)"), "App Name");
     }
 
     #[test]
@@ -428,7 +503,10 @@ mod tests {
         assert!(!is_safe_folder(Path::new("relative\\path")));
         assert!(!is_safe_folder(Path::new("app")));
 
-        // Windows system directories must never be safe
+        // Windows system directories must never be safe (regardless of path casing)
+        assert!(!is_safe_folder(Path::new(r"c:\windows\System32\driver")));
+        assert!(!is_safe_folder(Path::new(r"D:\$Recycle.Bin")));
+        assert!(!is_safe_folder(Path::new(r"E:\System Volume Information")));
         if let Some(sys_root) = std::env::var_os("SystemRoot") {
             let p = PathBuf::from(&sys_root);
             assert!(!is_safe_folder(&p));

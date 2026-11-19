@@ -50,7 +50,9 @@ impl Source {
 pub struct Program {
     pub id: usize,
     pub name: String,
+    pub name_lower: String,
     pub publisher: String,
+    pub publisher_lower: String,
     pub version: String,
     /// yyyy-mm-dd, empty when unknown
     pub install_date: String,
@@ -58,6 +60,7 @@ pub struct Program {
     pub size: Option<u64>,
     pub size_from_folder: bool,
     pub install_location: String,
+    pub install_dir_exists: bool,
     pub uninstall_cmd: String,
     pub icon: Option<(String, i32)>,
     pub source: Source,
@@ -168,8 +171,20 @@ pub fn expand_env(s: &str) -> String {
     out
 }
 
-fn is_msiexec(path: &str) -> bool {
-    path.to_ascii_lowercase().ends_with("msiexec.exe") || path.eq_ignore_ascii_case("msiexec")
+fn is_system_host_binary(path: &str) -> bool {
+    let p = Path::new(path);
+    let stem = p
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if matches!(
+        stem.as_str(),
+        "msiexec" | "rundll32" | "cmd" | "powershell" | "pwsh" | "regsvr32" | "wscript" | "cscript" | "conhost"
+    ) {
+        return true;
+    }
+    !crate::leftovers::is_safe_folder(p)
 }
 
 fn dir_of_existing_file(path: &str) -> Option<PathBuf> {
@@ -207,11 +222,17 @@ fn civil_from_days(z: i64) -> String {
 }
 
 fn normalize_date(raw: &str) -> String {
+    let valid_ymd = |y: u32, m: u32, d: u32| (1970..=2100).contains(&y) && (1..=12).contains(&m) && (1..=31).contains(&d);
     let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.len() == 8 && !raw.contains('/') {
-        let (y, m, d) = (&digits[0..4], &digits[4..6], &digits[6..8]);
-        if y.starts_with("19") || y.starts_with("20") {
-            return format!("{y}-{m}-{d}");
+        if let (Ok(y), Ok(m), Ok(d)) = (
+            digits[0..4].parse::<u32>(),
+            digits[4..6].parse::<u32>(),
+            digits[6..8].parse::<u32>(),
+        ) {
+            if valid_ymd(y, m, d) {
+                return format!("{y:04}-{m:02}-{d:02}");
+            }
         }
     }
     // m/d/yyyy as some installers write it
@@ -222,17 +243,53 @@ fn normalize_date(raw: &str) -> String {
             parts[1].trim().parse::<u32>(),
             parts[2].trim().parse::<u32>(),
         ) {
-            return format!("{y:04}-{m:02}-{d:02}");
+            if valid_ymd(y, m, d) {
+                return format!("{y:04}-{m:02}-{d:02}");
+            }
         }
     }
     String::new()
 }
 
+pub fn cmp_version(a: &str, b: &str) -> std::cmp::Ordering {
+    let mut ia = a.as_bytes();
+    let mut ib = b.as_bytes();
+    while !ia.is_empty() && !ib.is_empty() {
+        let a_num = ia[0].is_ascii_digit();
+        let b_num = ib[0].is_ascii_digit();
+        if a_num && b_num {
+            let na = ia.iter().take_while(|c| c.is_ascii_digit()).count();
+            let nb = ib.iter().take_while(|c| c.is_ascii_digit()).count();
+            let sa = std::str::from_utf8(&ia[..na]).unwrap_or("0");
+            let sb = std::str::from_utf8(&ib[..nb]).unwrap_or("0");
+            let va = sa.trim_start_matches('0');
+            let vb = sb.trim_start_matches('0');
+            let ord = va.len().cmp(&vb.len()).then_with(|| va.cmp(vb));
+            if ord != std::cmp::Ordering::Equal {
+                return ord;
+            }
+            ia = &ia[na..];
+            ib = &ib[nb..];
+        } else if a_num != b_num {
+            return ia[0].cmp(&ib[0]);
+        } else {
+            let ca = ia[0].to_ascii_lowercase();
+            let cb = ib[0].to_ascii_lowercase();
+            if ca != cb {
+                return ca.cmp(&cb);
+            }
+            ia = &ia[1..];
+            ib = &ib[1..];
+        }
+    }
+    ia.len().cmp(&ib.len()).then_with(|| a.cmp(b))
+}
+
 fn read_entry(source: Source, base: &RegKey, key_name: &str) -> Option<Program> {
     let key = base.open_subkey_with_flags(key_name, READ_FLAGS).ok()?;
-    let uninstall_cmd = get_str(&key, "UninstallString");
+    let raw_uninstall = get_str(&key, "UninstallString");
     // An entry needs an uninstall command to be listed at all.
-    if uninstall_cmd.is_empty() {
+    if raw_uninstall.is_empty() {
         return None;
     }
     let display_name = get_str(&key, "DisplayName");
@@ -242,30 +299,38 @@ fn read_entry(source: Source, base: &RegKey, key_name: &str) -> Option<Program> 
     let name = if display_name.is_empty() { key_name.to_string() } else { display_name };
 
     let is_msi = get_dword(&key, "WindowsInstaller") == Some(1);
-    let mut uninstall_cmd = uninstall_cmd;
-    if is_msi && key_name.starts_with('{') && key_name.ends_with('}') {
-        uninstall_cmd = format!("MsiExec.exe /X{key_name}");
-    }
+    let uninstall_cmd = if is_msi && key_name.starts_with('{') && key_name.ends_with('}') {
+        format!("MsiExec.exe /X{key_name}")
+    } else {
+        raw_uninstall.clone()
+    };
+
+    let (uninst_exe_raw, _) = split_command(&raw_uninstall);
+    let uninst_exe = expand_env(&uninst_exe_raw);
+    let parsed_icon = parse_icon(&get_str(&key, "DisplayIcon"));
 
     // Install location: InstallLocation, else the folder of the uninstaller, else of the icon.
     let mut install_location = expand_env(get_str(&key, "InstallLocation").trim_matches('"'));
     install_location = install_location.trim_end_matches('\\').to_string();
-    if install_location.is_empty() || !Path::new(&install_location).is_dir() {
-        let (exe, _) = split_command(&get_str(&key, "UninstallString"));
-        let exe = expand_env(&exe);
+    if !install_location.is_empty() && !crate::leftovers::is_safe_folder(Path::new(&install_location)) {
+        install_location.clear();
+    }
+    let mut install_dir_exists = !install_location.is_empty() && Path::new(&install_location).is_dir();
+    if install_location.is_empty() || !install_dir_exists {
         let mut derived = None;
-        if !is_msiexec(&exe) {
-            derived = dir_of_existing_file(&exe);
+        if !is_system_host_binary(&uninst_exe) {
+            derived = dir_of_existing_file(&uninst_exe);
         }
         if derived.is_none() {
-            if let Some((icon, _)) = parse_icon(&get_str(&key, "DisplayIcon")) {
-                if !is_msiexec(&icon) {
-                    derived = dir_of_existing_file(&icon);
+            if let Some((icon_path, _)) = &parsed_icon {
+                if !is_system_host_binary(icon_path) {
+                    derived = dir_of_existing_file(icon_path);
                 }
             }
         }
-        if let Some(d) = derived {
+        if let Some(d) = derived.filter(|d| crate::leftovers::is_safe_folder(d)) {
             if install_location.is_empty() {
+                install_dir_exists = d.is_dir();
                 install_location = d.to_string_lossy().to_string();
             }
         }
@@ -288,22 +353,31 @@ fn read_entry(source: Source, base: &RegKey, key_name: &str) -> Option<Program> 
         .filter(|&kb| kb > 0)
         .map(|kb| kb as u64 * 1024);
 
-    let icon = parse_icon(&get_str(&key, "DisplayIcon")).or_else(|| {
-        let (exe, _) = split_command(&get_str(&key, "UninstallString"));
-        let exe = expand_env(&exe);
-        if !is_msiexec(&exe) && Path::new(&exe).is_file() { Some((exe, 0)) } else { None }
+    let icon = parsed_icon.or_else(|| {
+        if !is_system_host_binary(&uninst_exe) && Path::new(&uninst_exe).is_file() {
+            Some((uninst_exe, 0))
+        } else {
+            None
+        }
     });
+
+    let publisher = get_str(&key, "Publisher");
+    let name_lower = name.to_lowercase();
+    let publisher_lower = publisher.to_lowercase();
 
     Some(Program {
         id: 0,
         name,
-        publisher: get_str(&key, "Publisher"),
+        name_lower,
+        publisher,
+        publisher_lower,
         version: get_str(&key, "DisplayVersion"),
         install_date,
         date_from_key_time,
         size,
         size_from_folder: false,
         install_location,
+        install_dir_exists,
         uninstall_cmd,
         icon,
         source,
@@ -339,7 +413,7 @@ pub fn scan() -> Vec<Program> {
             }
         }
     }
-    out.sort_by_key(|p| p.name.to_lowercase());
+    out.sort_by(|a, b| a.name_lower.cmp(&b.name_lower));
     for (i, p) in out.iter_mut().enumerate() {
         p.id = i;
     }
@@ -419,8 +493,18 @@ mod tests {
         assert_eq!(normalize_date("20240512"), "2024-05-12");
         assert_eq!(normalize_date("5/12/2024"), "2024-05-12");
         assert_eq!(normalize_date("1/2/2023"), "2023-01-02");
+        assert_eq!(normalize_date("20999999"), "");
+        assert_eq!(normalize_date("99/99/2024"), "");
         assert_eq!(normalize_date("invalid"), "");
         assert_eq!(normalize_date(""), "");
+    }
+
+    #[test]
+    fn test_cmp_version() {
+        assert_eq!(cmp_version("2.1.0", "10.2.0"), std::cmp::Ordering::Less);
+        assert_eq!(cmp_version("1.10", "1.2"), std::cmp::Ordering::Greater);
+        assert_eq!(cmp_version("23.01", "23.1"), std::cmp::Ordering::Less);
+        assert_eq!(cmp_version("1.0.0", "1.0.0"), std::cmp::Ordering::Equal);
     }
 
     #[test]

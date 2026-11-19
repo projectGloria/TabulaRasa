@@ -1,5 +1,7 @@
 /target
 /shots
+/capture/
+/investigation.cany/
 *.log
 agent-session.jsonl
 craft.json

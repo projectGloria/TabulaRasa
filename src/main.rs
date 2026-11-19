@@ -6,13 +6,13 @@ mod programs;
 mod system;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 
 use eframe::egui::{self, Color32, CornerRadius, RichText, Sense, Stroke, TextureHandle, Vec2};
-use leftovers::{Kind, Leftover};
+use leftovers::Leftover;
 use programs::{Program, format_size};
 
 // Colours: dark like the original's menus, with the purple of the Tabula Rasa icon.
@@ -31,11 +31,12 @@ const BAD: Color32 = Color32::from_rgb(0xf0, 0x6a, 0x6a);
 const ROW_H: f32 = 28.0;
 
 enum Msg {
-    Programs(Vec<Program>),
-    Size(usize, u64),
-    Icon(usize, usize, Vec<u8>),
-    UninstallDone(Result<u32, String>),
+    Programs(u64, Vec<Program>),
+    Size(u64, usize, u64),
+    Icon(u64, usize, usize, Vec<u8>),
+    UninstallDone(u64, Result<u32, String>),
     Leftovers(Vec<Leftover>, Vec<system::RunningProcess>),
+    ProcsUpdated(Vec<system::RunningProcess>),
     Removed(Vec<(String, Option<String>)>),
 }
 
@@ -50,9 +51,9 @@ enum SortCol {
 
 enum Dialog {
     None,
-    Confirm { id: usize, scan_after: bool, shared_with: Vec<String> },
-    Running { id: usize, scan_after: bool },
-    Waiting { id: usize, exit: Result<u32, String> },
+    Confirm { program: Program, scan_after: bool, shared_with: Vec<String> },
+    Running { run_id: u64, program: Program, scan_after: bool },
+    Waiting { program: Program, exit: Result<u32, String> },
     Scanning { name: String },
     Leftovers { program: Program, items: Vec<Leftover>, running_procs: Vec<system::RunningProcess> },
     Removing { name: String },
@@ -66,6 +67,9 @@ struct App {
     rx: Receiver<Msg>,
     programs: Vec<Program>,
     loading: bool,
+    scan_gen: u64,
+    uninstall_gen: u64,
+    cancel_scan: Arc<AtomicBool>,
     icons: HashMap<usize, TextureHandle>,
     logo: Option<TextureHandle>,
     selected: Option<usize>,
@@ -103,6 +107,9 @@ impl App {
             rx,
             programs: Vec::new(),
             loading: false,
+            scan_gen: 0,
+            uninstall_gen: 0,
+            cancel_scan: Arc::new(AtomicBool::new(false)),
             icons: HashMap::new(),
             logo,
             selected: None,
@@ -125,38 +132,59 @@ impl App {
     }
 
     fn refresh(&mut self, ctx: &egui::Context) {
-        if self.loading {
-            return;
-        }
+        self.cancel_scan.store(true, Ordering::Relaxed);
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.cancel_scan = cancel.clone();
+        self.scan_gen = self.scan_gen.wrapping_add(1);
+        let scan_id = self.scan_gen;
         self.loading = true;
         self.icons.clear();
         let tx = self.tx.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let list = programs::scan();
-            let _ = tx.send(Msg::Programs(list.clone()));
+            if cancel.load(Ordering::Relaxed) {
+                return;
+            }
+            let _ = tx.send(Msg::Programs(scan_id, list.clone()));
             ctx.request_repaint();
             // Icons
             let tx2 = tx.clone();
             let ctx2 = ctx.clone();
+            let cancel2 = cancel.clone();
             let icon_list: Vec<(usize, Option<(String, i32)>)> = list.iter().map(|p| (p.id, p.icon.clone())).collect();
             std::thread::spawn(move || {
+                let mut extractor = system::IconExtractor::new();
+                let mut pending_repaint = 0usize;
                 for (id, icon) in icon_list {
+                    if cancel2.load(Ordering::Relaxed) {
+                        return;
+                    }
                     if let Some((path, idx)) = icon {
-                        if let Some((s, rgba)) = system::icon_rgba(&path, idx) {
-                            let _ = tx2.send(Msg::Icon(id, s, rgba));
-                            ctx2.request_repaint();
+                        if let Some((s, rgba)) = extractor.as_mut().and_then(|ex| ex.extract(&path, idx)) {
+                            let _ = tx2.send(Msg::Icon(scan_id, id, s, rgba));
+                            pending_repaint += 1;
+                            if pending_repaint >= 16 {
+                                pending_repaint = 0;
+                                ctx2.request_repaint();
+                            }
                         }
                     }
                 }
+                if pending_repaint > 0 {
+                    ctx2.request_repaint();
+                }
             });
             // Sizes of programs that don't state one: measure their folder.
-            for p in list.iter().filter(|p| p.size.is_none() && !p.install_location.is_empty()) {
-                let path = std::path::Path::new(&p.install_location);
-                if path.is_dir() && leftovers::is_safe_folder(path) {
+            for p in list.iter().filter(|p| p.size.is_none() && p.install_dir_exists) {
+                if cancel.load(Ordering::Relaxed) {
+                    return;
+                }
+                let path = Path::new(&p.install_location);
+                if leftovers::is_safe_folder(path) {
                     if let Some(s) = programs::folder_size(path, 300_000) {
                         if s > 0 {
-                            let _ = tx.send(Msg::Size(p.id, s));
+                            let _ = tx.send(Msg::Size(scan_id, p.id, s));
                             ctx.request_repaint();
                         }
                     }
@@ -168,37 +196,55 @@ impl App {
     fn handle_messages(&mut self, ctx: &egui::Context) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Msg::Programs(list) => {
-                    let keep = self.selected.and_then(|id| self.programs.get(id)).map(|p| p.key_name.clone());
+                Msg::Programs(scan_id, list) => {
+                    if scan_id != self.scan_gen {
+                        continue;
+                    }
+                    let keep = self
+                        .selected
+                        .and_then(|id| self.programs.get(id))
+                        .map(|p| (p.key_name.clone(), p.source));
                     self.programs = list;
                     self.loading = false;
-                    self.selected = keep
-                        .and_then(|k| self.programs.iter().find(|p| p.key_name == k).map(|p| p.id));
+                    self.selected = keep.and_then(|(k, src)| {
+                        self.programs
+                            .iter()
+                            .find(|p| p.key_name == k && p.source == src)
+                            .map(|p| p.id)
+                    });
                     if self.selected.is_none() && self.shot_path.is_some() {
                         self.selected = self.visible().first().copied();
                     }
                 }
-                Msg::Size(id, s) => {
-                    if let Some(p) = self.programs.get_mut(id) {
-                        p.size = Some(s);
-                        p.size_from_folder = true;
+                Msg::Size(scan_id, id, s) => {
+                    if scan_id == self.scan_gen {
+                        if let Some(p) = self.programs.get_mut(id) {
+                            p.size = Some(s);
+                            p.size_from_folder = true;
+                        }
                     }
                 }
-                Msg::Icon(id, s, rgba) => {
-                    let tex = ctx.load_texture(
-                        format!("icon{id}"),
-                        egui::ColorImage::from_rgba_unmultiplied([s, s], &rgba),
-                        egui::TextureOptions::LINEAR,
-                    );
-                    self.icons.insert(id, tex);
+                Msg::Icon(scan_id, id, s, rgba) => {
+                    if scan_id == self.scan_gen {
+                        let tex = ctx.load_texture(
+                            format!("icon{id}"),
+                            egui::ColorImage::from_rgba_unmultiplied([s, s], &rgba),
+                            egui::TextureOptions::LINEAR,
+                        );
+                        self.icons.insert(id, tex);
+                    }
                 }
-                Msg::UninstallDone(exit) => {
-                    if let Dialog::Running { id, scan_after } = self.dialog {
-                        let gone = self.programs.get(id).is_some_and(|p| !p.key_still_exists());
-                        if gone && scan_after && exit.is_ok() {
-                            self.start_leftover_scan(ctx, id);
-                        } else {
-                            self.dialog = Dialog::Waiting { id, exit };
+                Msg::UninstallDone(run_id, exit) => {
+                    if let Dialog::Running { run_id: active_run, program, scan_after } = &self.dialog {
+                        if *active_run == run_id {
+                            let gone = !program.key_still_exists();
+                            let scan_after = *scan_after;
+                            let program = program.clone();
+                            if gone && scan_after && exit.is_ok() {
+                                self.start_leftover_scan(ctx, program);
+                            } else {
+                                self.dialog = Dialog::Waiting { program, exit };
+                            }
                         }
                     }
                 }
@@ -211,6 +257,11 @@ impl App {
                                 running_procs: procs,
                             };
                         }
+                    }
+                }
+                Msg::ProcsUpdated(procs) => {
+                    if let Dialog::Leftovers { running_procs, .. } = &mut self.dialog {
+                        *running_procs = procs;
                     }
                 }
                 Msg::Removed(lines) => {
@@ -231,8 +282,8 @@ impl App {
             .filter(|p| self.show_system || !p.system_component)
             .filter(|p| {
                 q.is_empty()
-                    || p.name.to_lowercase().contains(&q)
-                    || p.publisher.to_lowercase().contains(&q)
+                    || p.name_lower.contains(&q)
+                    || p.publisher_lower.contains(&q)
             })
             .map(|p| p.id)
             .collect();
@@ -240,54 +291,55 @@ impl App {
         v.sort_by(|&a, &b| {
             let (a, b) = (&ps[a], &ps[b]);
             let o = match self.sort {
-                SortCol::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                SortCol::Publisher => a.publisher.to_lowercase().cmp(&b.publisher.to_lowercase()),
+                SortCol::Name => a.name_lower.cmp(&b.name_lower),
+                SortCol::Publisher => a.publisher_lower.cmp(&b.publisher_lower),
                 SortCol::Size => a.size.unwrap_or(0).cmp(&b.size.unwrap_or(0)),
                 SortCol::Date => a.install_date.cmp(&b.install_date),
-                SortCol::Version => a.version.cmp(&b.version),
+                SortCol::Version => programs::cmp_version(&a.version, &b.version),
             };
             let o = if self.ascending { o } else { o.reverse() };
-            o.then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            o.then_with(|| a.name_lower.cmp(&b.name_lower))
         });
         v
     }
 
     fn ask_uninstall(&mut self, id: usize) {
-        let Some(p) = self.programs.get(id) else { return };
+        let Some(p) = self.programs.get(id).cloned() else { return };
         // Warn when another program uses the same folder (as the original does).
         let shared_with: Vec<String> = if p.install_location.is_empty() {
             Vec::new()
         } else {
+            let target = Path::new(&p.install_location);
             self.programs
                 .iter()
                 .filter(|o| o.id != id && !o.install_location.is_empty())
-                .filter(|o| o.install_location.trim_end_matches('\\').eq_ignore_ascii_case(p.install_location.trim_end_matches('\\')))
+                .filter(|o| leftovers::same_path(Path::new(&o.install_location), target))
                 .map(|o| o.name.clone())
                 .collect()
         };
-        self.dialog = Dialog::Confirm { id, scan_after: true, shared_with };
+        self.dialog = Dialog::Confirm { program: p, scan_after: true, shared_with };
     }
 
-    fn run_uninstaller(&mut self, ctx: &egui::Context, id: usize, scan_after: bool) {
-        let Some(p) = self.programs.get(id) else { return };
-        let (exe, args) = programs::split_command(&p.uninstall_cmd);
+    fn run_uninstaller(&mut self, ctx: &egui::Context, program: Program, scan_after: bool) {
+        let (exe, args) = programs::split_command(&program.uninstall_cmd);
         let exe = programs::expand_env(&exe);
+        self.uninstall_gen = self.uninstall_gen.wrapping_add(1);
+        let run_id = self.uninstall_gen;
         let tx = self.tx.clone();
         let ctx2 = ctx.clone();
-        self.dialog = Dialog::Running { id, scan_after };
+        self.dialog = Dialog::Running { run_id, program, scan_after };
         std::thread::spawn(move || {
             let res = match system::shell_start(&exe, &args, None) {
-                Ok(Some(proc_)) => Ok(proc_.wait()),
+                Ok(Some(proc_)) => proc_.wait(),
                 Ok(None) => Ok(0),
                 Err(e) => Err(e),
             };
-            let _ = tx.send(Msg::UninstallDone(res));
+            let _ = tx.send(Msg::UninstallDone(run_id, res));
             ctx2.request_repaint();
         });
     }
 
-    fn start_leftover_scan(&mut self, ctx: &egui::Context, id: usize) {
-        let Some(p) = self.programs.get(id).cloned() else { return };
+    fn start_leftover_scan(&mut self, ctx: &egui::Context, p: Program) {
         let others = self.programs.clone();
         self.dialog = Dialog::Scanning { name: p.name.clone() };
         self.pending_program = Some(p.clone());
@@ -296,7 +348,19 @@ impl App {
         std::thread::spawn(move || {
             let items = leftovers::scan(&p, &others);
             let procs = if !p.install_location.is_empty() {
-                system::find_processes_in_directory(std::path::Path::new(&p.install_location))
+                let loc = Path::new(&p.install_location);
+                let shared = others.iter().any(|o| {
+                    o.id != p.id
+                        && !o.install_location.is_empty()
+                        && (leftovers::same_path(Path::new(&o.install_location), loc)
+                            || leftovers::path_starts_with_ci(Path::new(&o.install_location), loc)
+                            || leftovers::path_starts_with_ci(loc, Path::new(&o.install_location)))
+                });
+                if !shared && leftovers::is_safe_folder(loc) {
+                    system::find_processes_in_directory(loc)
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             };
@@ -365,11 +429,19 @@ impl eframe::App for App {
                     for p in &img.pixels {
                         bytes.extend_from_slice(&p.to_srgba_unmultiplied());
                     }
-                    if let Some(parent) = path.parent() {
-                        let _ = std::fs::create_dir_all(parent);
-                    }
-                    if let Some(buf) = image::RgbaImage::from_raw(w as u32, h as u32, bytes) {
-                        let _ = buf.save(&path);
+                    let res: Result<(), String> = (|| {
+                        if let Some(parent) = path.parent() {
+                            if !parent.as_os_str().is_empty() {
+                                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                            }
+                        }
+                        let buf = image::RgbaImage::from_raw(w as u32, h as u32, bytes)
+                            .ok_or_else(|| "Invalid RGBA image dimensions".to_string())?;
+                        buf.save(&path).map_err(|e| e.to_string())
+                    })();
+                    if let Err(e) = res {
+                        eprintln!("Failed to save screenshot to {}: {e}", path.display());
+                        std::process::exit(1);
                     }
                     done.store(true, Ordering::SeqCst);
                 });
@@ -380,7 +452,7 @@ impl eframe::App for App {
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.refresh(&ctx);
         }
-        if matches!(self.dialog, Dialog::None) {
+        if matches!(self.dialog, Dialog::None) && !ctx.egui_wants_keyboard_input() {
             if let Some(id) = self.selected {
                 if ctx.input(|i| i.key_pressed(egui::Key::Delete)) {
                     self.ask_uninstall(id);
@@ -388,15 +460,16 @@ impl eframe::App for App {
             }
         }
 
+        let vis = self.visible();
         self.menu_bar(ui);
         self.toolbar(ui);
-        self.status_bar(ui);
+        self.status_bar(ui, &vis);
         if self.show_details {
             self.details_panel(ui);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin::symmetric(8, 4)))
-            .show(ui, |ui| self.program_list(ui));
+            .show(ui, |ui| self.program_list(ui, &vis));
 
         self.dialogs(&ctx);
     }
@@ -474,21 +547,27 @@ impl App {
                     if ui.add(egui::Button::new("⟳  Refresh").min_size(Vec2::new(0.0, 34.0))).on_hover_text("Read the list again (F5)").clicked() {
                         self.refresh(&ui.ctx().clone());
                     }
-                    let folder = self.selected.and_then(|id| self.programs.get(id)).map(|p| p.install_location.clone()).filter(|l| std::path::Path::new(l).is_dir());
+                    let folder = self
+                        .selected
+                        .and_then(|id| self.programs.get(id))
+                        .filter(|p| p.install_dir_exists)
+                        .map(|p| p.install_location.clone());
                     if ui.add_enabled(folder.is_some(), egui::Button::new("📂  Open folder").min_size(Vec2::new(0.0, 34.0))).clicked() {
                         if let Some(f) = folder {
                             system::open_path(&f);
                         }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let search_w = (ui.available_width() - 8.0).clamp(120.0, 240.0);
                         let r = ui.add(
                             egui::TextEdit::singleline(&mut self.search)
                                 .hint_text("🔍  Search programs")
-                                .desired_width(240.0)
-                                .min_size(Vec2::new(0.0, 30.0))
-                                ,
+                                .desired_width(search_w)
+                                .min_size(Vec2::new(0.0, 30.0)),
                         );
-                        if ui.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::F)) {
+                        if matches!(self.dialog, Dialog::None)
+                            && ui.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::F))
+                        {
                             r.request_focus();
                         }
                     });
@@ -506,8 +585,7 @@ impl App {
             });
     }
 
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
-        let vis = self.visible();
+    fn status_bar(&mut self, ui: &mut egui::Ui, vis: &[usize]) {
         let total: u64 = vis.iter().filter_map(|&i| self.programs[i].size).sum();
         egui::Panel::bottom("status")
             .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(10, 5)))
@@ -530,7 +608,7 @@ impl App {
     }
 
     fn details_panel(&mut self, ui: &mut egui::Ui) {
-        let Some(p) = self.selected.and_then(|id| self.programs.get(id)).cloned() else { return };
+        let Some(p) = self.selected.and_then(|id| self.programs.get(id)) else { return };
         egui::Panel::bottom("details")
             .resizable(false)
             .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(14, 10)).stroke(Stroke::new(1.0, LINE)))
@@ -596,14 +674,22 @@ impl App {
             });
     }
 
-    fn program_list(&mut self, ui: &mut egui::Ui) {
-        let vis = self.visible();
+    fn program_list(&mut self, ui: &mut egui::Ui, vis: &[usize]) {
         let full_w = ui.available_width();
-        let size_w = 90.0;
-        let date_w = 100.0;
-        let ver_w = 120.0;
-        let pub_w = (full_w * 0.24).clamp(140.0, 300.0);
-        let name_w = (full_w - size_w - date_w - ver_w - pub_w - 16.0).max(160.0);
+        let scroll_w = ui.spacing().scroll.allocated_width();
+        let avail_w = (full_w - scroll_w).max(200.0);
+        let base_size = 90.0_f32;
+        let base_date = 100.0_f32;
+        let base_ver = 120.0_f32;
+        let base_pub = (avail_w * 0.24).clamp(120.0, 300.0);
+        let min_name = 150.0_f32;
+        let fixed_sum = base_size + base_date + base_ver + base_pub;
+        let (name_w, pub_w, size_w, date_w, ver_w) = if avail_w >= fixed_sum + min_name {
+            (avail_w - fixed_sum, base_pub, base_size, base_date, base_ver)
+        } else {
+            let scale = avail_w / (fixed_sum + min_name);
+            (min_name * scale, base_pub * scale, base_size * scale, base_date * scale, base_ver * scale)
+        };
         let cols = [
             (SortCol::Name, "Program Name", name_w),
             (SortCol::Publisher, "Publisher", pub_w),
@@ -627,11 +713,21 @@ impl App {
             }
             let arrow = if self.sort == col { if self.ascending { " ▲" } else { " ▼" } } else { "" };
             let pad = if col == SortCol::Name { 34.0 } else { 8.0 };
-            ui.painter().text(
-                egui::pos2(r.left() + pad, r.center().y),
-                egui::Align2::LEFT_CENTER,
+            let text_w = (w - pad - 6.0).max(0.0);
+            let mut job = egui::text::LayoutJob::single_section(
                 format!("{title}{arrow}"),
-                egui::FontId::proportional(13.0),
+                egui::TextFormat::simple(egui::FontId::proportional(13.0), DIM),
+            );
+            job.wrap = egui::text::TextWrapping {
+                max_width: text_w,
+                max_rows: 1,
+                break_anywhere: true,
+                overflow_character: Some('…'),
+            };
+            let galley = ui.painter().layout_job(job);
+            ui.painter_at(r).galley(
+                egui::pos2(r.left() + pad, r.center().y - galley.size().y / 2.0),
+                galley,
                 DIM,
             );
             ui.painter().vline(r.right() - 1.0, r.y_range().shrink(5.0), Stroke::new(1.0, LINE));
@@ -655,13 +751,33 @@ impl App {
         // Keyboard navigation
         if matches!(self.dialog, Dialog::None) && !ui.ctx().egui_wants_keyboard_input() {
             let pos = self.selected.and_then(|s| vis.iter().position(|&v| v == s));
-            let (down, up, enter) = ui.input(|i| (i.key_pressed(egui::Key::ArrowDown), i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::Enter)));
+            let page = ((ui.available_height() / ROW_H).floor() as usize).max(1);
+            let (down, up, home, end, pgdn, pgup, enter) = ui.input(|i| (
+                i.key_pressed(egui::Key::ArrowDown),
+                i.key_pressed(egui::Key::ArrowUp),
+                i.key_pressed(egui::Key::Home),
+                i.key_pressed(egui::Key::End),
+                i.key_pressed(egui::Key::PageDown),
+                i.key_pressed(egui::Key::PageUp),
+                i.key_pressed(egui::Key::Enter),
+            ));
             if down {
                 self.selected = Some(vis[pos.map_or(0, |p| (p + 1).min(vis.len() - 1))]);
                 self.scroll_to_selected = true;
-            }
-            if up {
+            } else if up {
                 self.selected = Some(vis[pos.map_or(0, |p| p.saturating_sub(1))]);
+                self.scroll_to_selected = true;
+            } else if home {
+                self.selected = Some(vis[0]);
+                self.scroll_to_selected = true;
+            } else if end {
+                self.selected = Some(vis[vis.len() - 1]);
+                self.scroll_to_selected = true;
+            } else if pgdn {
+                self.selected = Some(vis[pos.map_or(0, |p| (p + page).min(vis.len() - 1))]);
+                self.scroll_to_selected = true;
+            } else if pgup {
+                self.selected = Some(vis[pos.map_or(0, |p| p.saturating_sub(page))]);
                 self.scroll_to_selected = true;
             }
             if enter {
@@ -669,22 +785,29 @@ impl App {
             }
         }
 
-        let mut scroll = egui::ScrollArea::vertical().auto_shrink([false, false]);
-        if self.scroll_to_selected {
-            if let Some(p) = self.selected.and_then(|s| vis.iter().position(|&v| v == s)) {
-                let viewport_h = ui.available_height();
-                let target = (p as f32 * ROW_H - viewport_h / 2.0).max(0.0);
-                scroll = scroll.vertical_scroll_offset(target);
-            }
+        let scroll_to_pos = if self.scroll_to_selected {
             self.scroll_to_selected = false;
-        }
+            self.selected.and_then(|s| vis.iter().position(|&v| v == s))
+        } else {
+            None
+        };
+
         let mut action: Option<(usize, &'static str)> = None;
-        scroll.show_rows(ui, ROW_H, vis.len(), |ui, range| {
-            ui.spacing_mut().item_spacing.y = 0.0;
+        let prev_spacing_y = ui.spacing().item_spacing.y;
+        ui.spacing_mut().item_spacing.y = 0.0;
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(ui, ROW_H, vis.len(), |ui, range| {
+            if let Some(p) = scroll_to_pos {
+                let target_y = ui.max_rect().top() + (p as isize - range.start as isize) as f32 * ROW_H;
+                let target_rect = egui::Rect::from_min_size(
+                    egui::pos2(ui.max_rect().left(), target_y),
+                    Vec2::new(avail_w, ROW_H),
+                );
+                ui.scroll_to_rect(target_rect, None);
+            }
             for row in range {
                 let id = vis[row];
                 let p = &self.programs[id];
-                let (rect, resp) = ui.allocate_exact_size(Vec2::new(full_w, ROW_H), Sense::click());
+                let (rect, resp) = ui.allocate_exact_size(Vec2::new(avail_w, ROW_H), Sense::click());
                 let selected = self.selected == Some(id);
                 let painter = ui.painter_at(rect);
                 if selected {
@@ -704,17 +827,30 @@ impl App {
                 let text_col = if selected { Color32::WHITE } else { TEXT };
                 let dim_col = if selected { Color32::from_rgb(0xe6, 0xd8, 0xf0) } else { DIM };
                 let size_txt = p.size.map(format_size).unwrap_or_else(|| "Unknown".into());
-                let cells: [(String, f32, Color32, f32); 5] = [
-                    (p.name.clone(), name_w, text_col, 34.0),
-                    (p.publisher.clone(), pub_w, dim_col, 8.0),
-                    (size_txt, size_w, dim_col, 8.0),
-                    (p.install_date.clone(), date_w, dim_col, 8.0),
-                    (p.version.clone(), ver_w, dim_col, 8.0),
+                let cells: [(&str, f32, Color32, f32); 5] = [
+                    (&p.name, name_w, text_col, 34.0),
+                    (&p.publisher, pub_w, dim_col, 8.0),
+                    (&size_txt, size_w, dim_col, 8.0),
+                    (&p.install_date, date_w, dim_col, 8.0),
+                    (&p.version, ver_w, dim_col, 8.0),
                 ];
                 let mut x = rect.left();
+                let mut any_elided = false;
                 for (txt, w, col, pad) in cells {
-                    let cell = egui::Rect::from_min_size(egui::pos2(x + pad, rect.top()), Vec2::new(w - pad - 6.0, ROW_H));
-                    let galley = ui.painter().layout(txt, egui::FontId::proportional(13.5), col, f32::INFINITY);
+                    let cell_w = (w - pad - 6.0).max(0.0);
+                    let cell = egui::Rect::from_min_size(egui::pos2(x + pad, rect.top()), Vec2::new(cell_w, ROW_H));
+                    let mut job = egui::text::LayoutJob::single_section(
+                        txt.to_string(),
+                        egui::TextFormat::simple(egui::FontId::proportional(13.5), col),
+                    );
+                    job.wrap = egui::text::TextWrapping {
+                        max_width: cell_w,
+                        max_rows: 1,
+                        break_anywhere: true,
+                        overflow_character: Some('…'),
+                    };
+                    let galley = ui.painter().layout_job(job);
+                    any_elided |= galley.elided;
                     let clip = ui.painter_at(cell);
                     clip.galley(egui::pos2(cell.left(), cell.center().y - galley.size().y / 2.0), galley, col);
                     x += w;
@@ -733,14 +869,25 @@ impl App {
                     if ui.button("Visit website").clicked() { action = Some((id, "web")); ui.close(); }
                     if ui.button("Copy name").clicked() { action = Some((id, "copy")); ui.close(); }
                 });
+                if any_elided && resp.hovered() {
+                    let mut tip = p.name.clone();
+                    if !p.publisher.is_empty() {
+                        tip.push_str(&format!("\n{}", p.publisher));
+                    }
+                    if !p.version.is_empty() {
+                        tip.push_str(&format!("\nVersion {}", p.version));
+                    }
+                    resp.on_hover_text(tip);
+                }
             }
         });
+        ui.spacing_mut().item_spacing.y = prev_spacing_y;
         if let Some((id, what)) = action {
-            let p = self.programs[id].clone();
+            let p = &self.programs[id];
             match what {
                 "uninstall" => self.ask_uninstall(id),
                 "folder" => {
-                    if std::path::Path::new(&p.install_location).is_dir() {
+                    if p.install_dir_exists {
                         system::open_path(&p.install_location);
                     } else {
                         self.dialog = Dialog::Message { title: "No folder".into(), text: format!("{} has no install folder on this computer.", p.name) };
@@ -767,21 +914,20 @@ impl App {
             .corner_radius(CornerRadius::same(8))
             .inner_margin(egui::Margin::same(18));
         let mut next: Option<Dialog> = None;
-        let mut start_uninstall: Option<(usize, bool)> = None;
-        let mut start_scan: Option<usize> = None;
+        let mut start_uninstall: Option<(Program, bool)> = None;
+        let mut start_scan: Option<Program> = None;
+        let mut start_kill_procs: Option<(Vec<u32>, String)> = None;
         let mut start_remove: Option<(String, Vec<Leftover>)> = None;
         let mut close_on_escape = false;
 
         let dialog = &mut self.dialog;
-        let programs = &self.programs;
         egui::Modal::new(egui::Id::unique("tabula_dialog")).frame(frame).show(ctx, |ui| {
             ui.set_width(520.0);
             match dialog {
-                Dialog::Confirm { id, scan_after, shared_with } => {
-                    let p = &programs[*id];
+                Dialog::Confirm { program, scan_after, shared_with } => {
                     ui.label(RichText::new("Uninstall program").size(18.0).strong());
                     ui.add_space(6.0);
-                    ui.label(format!("Do you want to uninstall {}?", p.name));
+                    ui.label(format!("Do you want to uninstall {}?", program.name));
                     if !shared_with.is_empty() {
                         ui.add_space(6.0);
                         ui.label(RichText::new(format!(
@@ -794,39 +940,43 @@ impl App {
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         if ui.add(egui::Button::new(RichText::new("Uninstall").strong().color(Color32::WHITE)).fill(PURPLE)).clicked() {
-                            start_uninstall = Some((*id, *scan_after));
+                            start_uninstall = Some((program.clone(), *scan_after));
                         }
                         if ui.button("Cancel").clicked() { next = Some(Dialog::None); }
                     });
                     close_on_escape = true;
                 }
-                Dialog::Running { id, .. } => {
+                Dialog::Running { run_id: _, program, .. } => {
                     ui.label(RichText::new("Uninstalling…").size(18.0).strong());
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(format!("The uninstaller of {} is running. Follow its steps; Tabula Rasa waits for it.", programs[*id].name));
+                        ui.label(format!("The uninstaller of {} is running. Follow its steps; Tabula Rasa waits for it.", program.name));
                     });
+                    ui.add_space(10.0);
+                    if ui.button("Stop waiting").clicked() {
+                        next = Some(Dialog::Waiting { program: program.clone(), exit: Ok(0) });
+                    }
                 }
-                Dialog::Waiting { id, exit } => {
-                    let p = &programs[*id];
+                Dialog::Waiting { program, exit } => {
                     ui.label(RichText::new("Uninstaller closed").size(18.0).strong());
                     ui.add_space(6.0);
                     match exit {
                         Err(e) => { ui.label(RichText::new(e.as_str()).color(BAD)); }
-                        Ok(_) if !p.key_still_exists() => { ui.label(RichText::new(format!("{} was removed.", p.name)).color(OK)); }
+                        Ok(_) if !program.key_still_exists() => { ui.label(RichText::new(format!("{} was removed.", program.name)).color(OK)); }
                         Ok(_) => {
-                            ui.label(format!("{} still shows as installed.", p.name));
+                            ui.label(format!("{} still shows as installed.", program.name));
                             ui.label(RichText::new("Some uninstallers keep running in a new window. When it has finished, look for leftovers. If you cancelled it, just close this.").color(DIM));
                         }
                     }
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         if ui.add(egui::Button::new(RichText::new("Look for leftovers").strong().color(Color32::WHITE)).fill(PURPLE)).clicked() {
-                            start_scan = Some(*id);
+                            start_scan = Some(program.clone());
                         }
                         if ui.button("Close").clicked() { next = Some(Dialog::None); }
                     });
+                    close_on_escape = true;
                 }
                 Dialog::Scanning { name } => {
                     ui.label(RichText::new("Looking for leftovers").size(18.0).strong());
@@ -861,14 +1011,8 @@ impl App {
                                 .add(egui::Button::new("Close running processes").fill(Color32::from_rgb(0x7a, 0x4a, 0x22)))
                                 .clicked()
                             {
-                                for proc_ in running_procs.iter() {
-                                    system::terminate_process_by_pid(proc_.pid);
-                                }
-                                if !program.install_location.is_empty() {
-                                    *running_procs = system::find_processes_in_directory(
-                                        std::path::Path::new(&program.install_location),
-                                    );
-                                }
+                                let pids = running_procs.iter().map(|p| p.pid).collect();
+                                start_kill_procs = Some((pids, program.install_location.clone()));
                             }
                         }
                         ui.add_space(6.0);
@@ -888,15 +1032,13 @@ impl App {
                         let any = items.iter().any(|i| i.selected);
                         ui.horizontal(|ui| {
                             if ui.add_enabled(any, egui::Button::new(RichText::new("Remove selected").strong().color(Color32::WHITE)).fill(PURPLE)).clicked() {
-                                for proc_ in running_procs.iter() {
-                                    system::terminate_process_by_pid(proc_.pid);
-                                }
                                 start_remove = Some((program.name.clone(), items.clone()));
                             }
                             if ui.button("Select all").clicked() { items.iter_mut().for_each(|i| i.selected = true); }
                             if ui.button("Select none").clicked() { items.iter_mut().for_each(|i| i.selected = false); }
                             if ui.button("Skip").clicked() { next = Some(Dialog::None); }
                         });
+                        close_on_escape = true;
                     }
                 }
                 Dialog::Removing { name } => {
@@ -950,11 +1092,27 @@ impl App {
         if let Some(d) = next {
             self.dialog = d;
         }
-        if let Some((id, scan)) = start_uninstall {
-            self.run_uninstaller(ctx, id, scan);
+        if let Some((program, scan)) = start_uninstall {
+            self.run_uninstaller(ctx, program, scan);
         }
-        if let Some(id) = start_scan {
-            self.start_leftover_scan(ctx, id);
+        if let Some(program) = start_scan {
+            self.start_leftover_scan(ctx, program);
+        }
+        if let Some((pids, dir)) = start_kill_procs {
+            let tx = self.tx.clone();
+            let ctx2 = ctx.clone();
+            std::thread::spawn(move || {
+                for pid in pids {
+                    system::terminate_process_by_pid(pid);
+                }
+                let procs = if !dir.is_empty() && leftovers::is_safe_folder(Path::new(&dir)) {
+                    system::find_processes_in_directory(Path::new(&dir))
+                } else {
+                    Vec::new()
+                };
+                let _ = tx.send(Msg::ProcsUpdated(procs));
+                ctx2.request_repaint();
+            });
         }
         if let Some((name, items)) = start_remove {
             self.dialog = Dialog::Removing { name: name.clone() };
@@ -966,7 +1124,6 @@ impl App {
                 ctx2.request_repaint();
             });
         }
-        let _ = Kind::Folder;
     }
 }
 
